@@ -1,0 +1,45 @@
+#!/bin/sh
+# File: vacuum_analyze.sh
+#
+# This script triggers VACUUM ANALYZE for each database on the server
+#
+# History:
+#
+# Date       Author       Comments
+# ---------- ------------ ----------------------------------------------
+# 18/08/2017 KLewandowski Created
+# ----------------------------------------------------------------------
+#
+
+
+PGTAB=/etc/pgtab
+
+BASE_PATH=/usr/lib64/qt-3.3/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:$PATH:$HOME/.local/bin:$HOME/bin
+
+for line in $(awk ' $1!~ /[#*]/ {print $1} ' $PGTAB | sed '/^$/d' | cut -d: -f1,2,3,4 | grep -v ':dummy')
+do
+  if [ -n "$line" ]
+  then
+    export PGDATABASE=`echo $line |cut -d: -f1`
+    export PGHOME=`echo $line |cut -d: -f2`
+    export PATH=$BASE_PATH:${PGHOME}/bin
+    export PGDATA=`echo $line |cut -d: -f3`
+    export PGPORT=`echo $line |cut -d: -f4`
+
+    if [ $(ps -eaf | grep "postgres: ${PGDATABASE}: writer process" | grep -v grep | wc -l) -gt 0 ]
+    then
+      DBLIST=`$PGHOME/bin/psql -X -q -t postgres <<! | tr -d '[\n]' 2>/dev/null
+SELECT datname FROM pg_database where datname not in ('postgres','template0','template1');
+!`
+
+      echo "cluster: $PGDATABASE - databases: $DBLIST"
+      for DBNAME in $DBLIST
+      do
+#        $PGHOME/bin/psql -d $DBNAME -c "vacuum analyze;"
+#        nohup $PGHOME/bin/psql -d $DBNAME -c "analyze;" &
+        nohup $PGHOME/bin/psql -d $DBNAME -c "vacuum analyze;" &
+      done
+    fi
+  fi
+done
+

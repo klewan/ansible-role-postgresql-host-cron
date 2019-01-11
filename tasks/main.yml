@@ -1,0 +1,56 @@
+---
+
+- name: create scripts directory
+  file: path={{ postgresql_scripts_directory }} state=directory owner={{ postgresql_user }} group={{ postgresql_group }} mode=0755
+  when: postgresql_host_cron_copy_scripts
+  tags:
+    - postgresql_host_cron_scripts_directory
+
+- name: copy scripts
+  template:
+    src: "{{ item.file }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  with_items:
+    - "{{ postgresql_host_cron_templates_to_copy }}"
+  loop_control:
+    label: "file: {{ item.file }}, dest: {{ item.dest }}]"
+  when: postgresql_host_cron_copy_scripts
+  tags:
+    - postgresql_host_cron_copy_scripts
+
+- name: set up cron jobs
+  cron:
+    name: "{{ item.name }}"
+    job: "{{ item.job }}"
+    minute: "{{ item.minute|default(omit) }}"
+    hour: "{{ item.hour|default(omit) }}"
+    day: "{{ item.day|default(omit) }}"
+    weekday: "{{ item.weekday|default(omit) }}"
+    month: "{{ item.month|default(omit) }}"
+    state: "{{ item.state|default('present',true) }}"
+    disabled: "{{ postgresql_host_cron_disabled_item }}"
+  with_items:
+    - "{{ postgresql_host_cron_config }}"
+  loop_control:
+    label: "job: {{ item.job }}, state: {{ item.state|default('present',true) }}, disabled: {{ postgresql_host_cron_disabled_item }}]"
+  when: postgresql_host_cron_manage_cron_jobs
+  tags:
+    - postgresql_host_cron_setup
+
+- name: import backup related jobs from postgresql-nsr-backup role
+  import_role:
+    name: postgresql-nsr-backup
+    tasks_from: backup_wal_archives_emergency_setup.yml
+    vars_from: main.yml
+  vars:
+    postgresql_nsr_backup_cron_copy_scripts: '{{ postgresql_host_cron_copy_scripts }}'
+    postgresql_nsr_backup_manage_cron_jobs: '{{ postgresql_host_cron_manage_cron_jobs }}'
+    postgresql_nsr_backup_cron_disable_jobs: '{{ postgresql_host_cron_disable_jobs }}'
+  when: postgresql_host_cron_import_nsr_backup_role
+  tags:
+    - postgresql_host_cron_import_nsr_backup_role
+
+
